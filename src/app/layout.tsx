@@ -20,6 +20,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://your-calculator-site.vercel.app"),
   verification: {
     google: "qAW5DaMSvoFPquTk2M-pN6pMq3tBmkQuXoR2F7q5UAs",
+    naver: "142b7b469a8bd3cf70b68c642489b8ee44bff08c",
   },
   openGraph: {
     title: "환율 + BMI 계산기",
