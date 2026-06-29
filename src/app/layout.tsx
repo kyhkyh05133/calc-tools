@@ -18,6 +18,9 @@ export const metadata: Metadata = {
   description:
     "무료 환율 변환기와 BMI 계산기를 제공하는 반응형 수익형 웹사이트입니다.",
   metadataBase: new URL("https://your-calculator-site.vercel.app"),
+  verification: {
+    google: "qAW5DaMSvoFPquTk2M-pN6pMq3tBmkQuXoR2F7q5UAs",
+  },
   openGraph: {
     title: "환율 + BMI 계산기",
     description:
