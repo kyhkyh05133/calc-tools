@@ -3,13 +3,14 @@
 type ExchangeHistoryChartProps = {
   historyPoints: Array<[string, Record<string, number>]>,
   targetCurrency: string,
+  emptyMessage?: string,
 };
 
-export default function ExchangeHistoryChart({ historyPoints, targetCurrency }: ExchangeHistoryChartProps) {
+export default function ExchangeHistoryChart({ historyPoints, targetCurrency, emptyMessage }: ExchangeHistoryChartProps) {
   if (historyPoints.length === 0) {
     return (
       <div className="rounded-3xl border border-slate-200/80 bg-slate-50 p-6 text-center text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-        환율 차트 데이터를 불러오는 중입니다...
+        {emptyMessage ?? "환율 차트 데이터를 불러오는 중입니다..."}
       </div>
     );
   }

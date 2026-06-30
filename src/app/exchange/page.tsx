@@ -16,10 +16,25 @@ const currencies = [
   "SGD",
 ];
 
-const fetchRates = async (base: string, symbols: string[]) => {
+const fallbackRates: Record<string, number> = {
+  USD: 1380,
+  EUR: 1550,
+  JPY: 9.2,
+  CNY: 190,
+  GBP: 1750,
+  AUD: 900,
+  CAD: 1010,
+  THB: 38,
+  VND: 0.055,
+  KRW: 1,
+  CHF: 0.91,
+  SGD: 1.35,
+};
+
+const fetchRates = async (symbols: string[]) => {
   const url = new URL("https://api.frankfurter.app/latest");
-  url.searchParams.set("from", base);
-  url.searchParams.set("to", symbols.join(","));
+  url.searchParams.set("from", "USD");
+  url.searchParams.set("to", symbols.filter((symbol) => symbol !== "USD").join(","));
   const res = await fetch(url.toString());
   if (!res.ok) {
     throw new Error("환율 정보를 불러오는 데 실패했습니다.");
@@ -27,15 +42,12 @@ const fetchRates = async (base: string, symbols: string[]) => {
   return res.json();
 };
 
-const fetchHistory = async (base: string, target: string) => {
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - 30);
-  const startDate = start.toISOString().split("T")[0];
-  const endDate = end.toISOString().split("T")[0];
+const fetchHistory = async () => {
+  const startDate = "2025-06-01";
+  const endDate = "2026-06-30";
   const url = new URL(`https://api.frankfurter.app/${startDate}..${endDate}`);
-  url.searchParams.set("from", base);
-  url.searchParams.set("to", target);
+  url.searchParams.set("from", "USD");
+  url.searchParams.set("to", "KRW");
   const res = await fetch(url.toString());
   if (!res.ok) {
     throw new Error("환율 차트 데이터를 불러오는 데 실패했습니다.");
@@ -48,32 +60,53 @@ export default function ExchangePage() {
   const [targetCurrency, setTargetCurrency] = useState("USD");
   const [amount, setAmount] = useState(1000);
   const [feePercent, setFeePercent] = useState(0.5);
-  const [rateData, setRateData] = useState<Record<string, number>>({});
+  const [rateData, setRateData] = useState<Record<string, number>>({ ...fallbackRates });
   const [history, setHistory] = useState<Record<string, Record<string, number>>>({});
-  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUsingFallback, setIsUsingFallback] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
 
   useEffect(() => {
     const load = async () => {
-      setError(null);
       setIsLoading(true);
+      setHistoryError(false);
+      setIsUsingFallback(false);
+
       try {
-        const symbols = currencies.filter((c) => c !== baseCurrency);
-        const rates = await fetchRates(baseCurrency, symbols);
-        setRateData(rates.rates || {});
-        const historyData = await fetchHistory(baseCurrency, targetCurrency);
+        const symbols = currencies.filter((currency) => currency !== "USD");
+        const rates = await fetchRates(symbols);
+        const nextRates: Record<string, number> = { ...fallbackRates };
+        const usdToKrw = fallbackRates.USD;
+
+        for (const [currency, value] of Object.entries(rates.rates || {})) {
+          if (typeof value === "number" && value > 0) {
+            nextRates[currency] = usdToKrw / value;
+          }
+        }
+
+        setRateData(nextRates);
+      } catch {
+        setRateData({ ...fallbackRates });
+        setIsUsingFallback(true);
+      }
+
+      try {
+        const historyData = await fetchHistory();
         setHistory(historyData.rates || {});
-      } catch (err) {
-        setError((err as Error).message);
+      } catch {
+        setHistoryError(true);
+        setHistory({});
       } finally {
         setIsLoading(false);
       }
     };
+
     load();
   }, [baseCurrency, targetCurrency]);
 
-  const targetRate = rateData[targetCurrency] ?? 0;
-  const convertedAmount = useMemo(() => amount * targetRate, [amount, targetRate]);
+  const baseRate = rateData[baseCurrency] ?? fallbackRates[baseCurrency] ?? 1;
+  const targetRate = rateData[targetCurrency] ?? fallbackRates[targetCurrency] ?? 1;
+  const convertedAmount = useMemo(() => (amount * targetRate) / baseRate, [amount, baseRate, targetRate]);
   const feeAmount = useMemo(() => convertedAmount * (feePercent / 100), [convertedAmount, feePercent]);
   const totalWithFee = useMemo(() => convertedAmount - feeAmount, [convertedAmount, feeAmount]);
   const historyPoints = useMemo(
@@ -141,10 +174,13 @@ export default function ExchangePage() {
             <h2 className="text-xl font-semibold text-slate-950 dark:text-white">계산 결과</h2>
             {isLoading ? (
               <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">환율 정보를 불러오는 중입니다...</p>
-            ) : error ? (
-              <p className="mt-4 text-sm text-red-600 dark:text-red-400">{error}</p>
             ) : (
               <div className="mt-4 space-y-4">
+                {isUsingFallback ? (
+                  <p className="text-sm text-amber-600 dark:text-amber-400">
+                    실시간 환율을 불러오지 못해 기본 환율로 계산합니다.
+                  </p>
+                ) : null}
                 <div className="rounded-3xl bg-slate-50 p-4 dark:bg-slate-950">
                   <p className="text-sm text-slate-500 dark:text-slate-400">1 {baseCurrency} = {targetRate.toFixed(4)} {targetCurrency}</p>
                   <p className="mt-2 text-3xl font-semibold text-slate-950 dark:text-white">{convertedAmount.toLocaleString()} {targetCurrency}</p>
@@ -172,7 +208,11 @@ export default function ExchangePage() {
         </div>
 
         <section className="mt-10">
-          <ExchangeHistoryChart historyPoints={historyPoints} targetCurrency={targetCurrency} />
+          <ExchangeHistoryChart
+            historyPoints={historyPoints}
+            targetCurrency={targetCurrency}
+            emptyMessage={historyError ? "데이터를 불러올 수 없습니다" : undefined}
+          />
         </section>
       </section>
     </div>
