@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/components/LanguageProvider";
+import { getTranslation } from "@/lib/translations";
 
 const navItems = [
-  { label: "홈", href: "/" },
-  { label: "환율 변환기", href: "/exchange" },
-  { label: "BMI 계산기", href: "/bmi" },
-  { label: "About", href: "/about" },
+  { key: "navHome", href: "/" },
+  { key: "navExchange", href: "/exchange" },
+  { key: "navBmi", href: "/bmi" },
+  { key: "navAbout", href: "/about" },
 ];
 
 export default function NavBar() {
   const [isDark, setIsDark] = useState(false);
+  const { language, setLanguage } = useLanguage();
 
   useEffect(() => {
     const saved = window.localStorage.getItem("theme");
@@ -31,7 +34,7 @@ export default function NavBar() {
     <header className="border-b border-slate-200/80 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <Link href="/" className="text-lg font-semibold text-slate-950 dark:text-white">
-          환율 + BMI 계산기
+          {getTranslation("appTitle", language)}
         </Link>
         <div className="flex items-center gap-4">
           <nav className="hidden items-center gap-4 md:flex">
@@ -41,16 +44,23 @@ export default function NavBar() {
                 href={item.href}
                 className="text-sm font-medium text-slate-600 transition hover:text-slate-950 dark:text-slate-300 dark:hover:text-white"
               >
-                {item.label}
+                {getTranslation(item.key as never, language)}
               </Link>
             ))}
           </nav>
           <button
             type="button"
+            onClick={() => setLanguage(language === "ko" ? "en" : "ko")}
+            className="rounded-full border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 transition hover:border-slate-400 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            {getTranslation("languageToggle", language)}
+          </button>
+          <button
+            type="button"
             onClick={toggleTheme}
             className="rounded-full border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700 transition hover:border-slate-400 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            {isDark ? "라이트" : "다크"}
+            {isDark ? getTranslation("themeLight", language) : getTranslation("themeDark", language)}
           </button>
         </div>
       </div>

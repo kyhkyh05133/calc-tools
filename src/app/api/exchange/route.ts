@@ -15,8 +15,15 @@ const fallbackRates: Record<string, number> = {
   KRW: 1,
 };
 
+const getUsdRate = (currency: string) => fallbackRates[currency] ?? 1;
+
+const convertRate = (base: string, target: string) => {
+  const baseUsdRate = getUsdRate(base);
+  const targetUsdRate = getUsdRate(target);
+  return baseUsdRate / targetUsdRate;
+};
+
 const buildLatestFallbackRates = (base: string, to?: string) => {
-  const baseRate = fallbackRates[base] ?? 1;
   const symbols = to
     ? to.split(",").filter(Boolean)
     : Object.keys(fallbackRates).filter((currency) => currency !== base);
@@ -28,8 +35,7 @@ const buildLatestFallbackRates = (base: string, to?: string) => {
       continue;
     }
 
-    const symbolRate = fallbackRates[symbol] ?? 1;
-    rates[symbol] = baseRate / symbolRate;
+    rates[symbol] = convertRate(base, symbol);
   }
 
   return rates;
@@ -43,9 +49,7 @@ const buildHistoryFallbackRates = (base: string, to: string, start: string, end:
   const current = new Date(startDate);
   while (current <= endDate) {
     const date = current.toISOString().split("T")[0];
-    const baseRate = fallbackRates[base] ?? 1;
-    const targetRate = fallbackRates[to] ?? 1;
-    rates[date] = { [to]: baseRate / targetRate };
+    rates[date] = { [to]: convertRate(base, to) };
     current.setDate(current.getDate() + 1);
   }
 
@@ -65,7 +69,7 @@ export async function GET(request: NextRequest) {
 
   if (start && end) {
     const url = new URL(`https://api.frankfurter.app/${start}..${end}`);
-    url.searchParams.set("from", base);
+    url.searchParams.set("from", "USD");
     if (to) {
       url.searchParams.set("to", to);
     }
@@ -96,7 +100,7 @@ export async function GET(request: NextRequest) {
   }
 
   const url = new URL("https://api.frankfurter.app/latest");
-  url.searchParams.set("from", base);
+  url.searchParams.set("from", "USD");
   if (to) {
     url.searchParams.set("to", to);
   }

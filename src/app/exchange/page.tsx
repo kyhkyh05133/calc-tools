@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import ExchangeHistoryChart from "@/components/ExchangeHistoryChart";
+import { useLanguage } from "@/components/LanguageProvider";
+import { getTranslation } from "@/lib/translations";
 
 const currencies = [
   "USD",
@@ -56,6 +58,7 @@ const fetchHistory = async () => {
 };
 
 export default function ExchangePage() {
+  const { language } = useLanguage();
   const [baseCurrency, setBaseCurrency] = useState("KRW");
   const [targetCurrency, setTargetCurrency] = useState("USD");
   const [amount, setAmount] = useState(1000);
@@ -75,9 +78,9 @@ export default function ExchangePage() {
       setRateError(null);
 
       try {
-        const symbols = currencies.filter((currency) => currency !== baseCurrency);
-        const rates = await fetchRates(baseCurrency, symbols);
-        const nextRates: Record<string, number> = { [baseCurrency]: 1 };
+        const symbols = currencies.filter((currency) => currency !== "USD");
+        const rates = await fetchRates("USD", symbols);
+        const nextRates: Record<string, number> = { USD: 1 };
 
         for (const [currency, value] of Object.entries(rates.rates || {})) {
           if (typeof value === "number" && value > 0) {
@@ -85,18 +88,24 @@ export default function ExchangePage() {
           }
         }
 
+        const usdToBase = getFallbackRate("USD", baseCurrency);
+        const usdToTarget = getFallbackRate("USD", targetCurrency);
+        const baseToTarget = usdToTarget / usdToBase;
+
         for (const currency of currencies) {
           if (!(currency in nextRates)) {
-            nextRates[currency] = getFallbackRate(baseCurrency, currency);
+            nextRates[currency] = getFallbackRate("USD", currency);
           }
         }
 
         setRateData(nextRates);
+        setRateError(null);
+        setIsUsingFallback(Boolean(rates.fallback));
       } catch {
-        const fallbackRateData: Record<string, number> = { [baseCurrency]: 1 };
+        const fallbackRateData: Record<string, number> = { USD: 1 };
         for (const currency of currencies) {
-          if (currency !== baseCurrency) {
-            fallbackRateData[currency] = getFallbackRate(baseCurrency, currency);
+          if (currency !== "USD") {
+            fallbackRateData[currency] = getFallbackRate("USD", currency);
           }
         }
         setRateData(fallbackRateData);
@@ -118,8 +127,35 @@ export default function ExchangePage() {
     load();
   }, [baseCurrency, targetCurrency]);
 
-  const targetRate = rateData[targetCurrency] ?? getFallbackRate(baseCurrency, targetCurrency);
-  const convertedAmount = useMemo(() => amount * targetRate, [amount, targetRate]);
+  const targetRate = useMemo(() => {
+    if (baseCurrency === targetCurrency) {
+      return 1;
+    }
+
+    if (baseCurrency === "USD") {
+      return rateData[targetCurrency] ?? getFallbackRate("USD", targetCurrency);
+    }
+
+    if (targetCurrency === "USD") {
+      return 1 / (rateData[baseCurrency] ?? getFallbackRate("USD", baseCurrency));
+    }
+
+    const baseToUsd = 1 / (rateData[baseCurrency] ?? getFallbackRate("USD", baseCurrency));
+    const usdToTarget = rateData[targetCurrency] ?? getFallbackRate("USD", targetCurrency);
+    return baseToUsd * usdToTarget;
+  }, [baseCurrency, rateData, targetCurrency]);
+
+  const convertedAmount = useMemo(() => {
+    if (baseCurrency === "USD") {
+      return amount * targetRate;
+    }
+
+    if (targetCurrency === "USD") {
+      return amount / (rateData[baseCurrency] ?? getFallbackRate("USD", baseCurrency));
+    }
+
+    return amount * targetRate;
+  }, [amount, baseCurrency, rateData, targetCurrency, targetRate]);
   const feeAmount = useMemo(() => convertedAmount * (feePercent / 100), [convertedAmount, feePercent]);
   const totalWithFee = useMemo(() => convertedAmount - feeAmount, [convertedAmount, feeAmount]);
   const historyPoints = useMemo(
@@ -130,13 +166,13 @@ export default function ExchangePage() {
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <section className="rounded-3xl border border-slate-200/80 bg-white/90 p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900/95">
-        <h1 className="text-3xl font-semibold text-slate-950 dark:text-white">환율 변환기</h1>
+        <h1 className="text-3xl font-semibold text-slate-950 dark:text-white">{getTranslation("exchangeTitle", language)}</h1>
         <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
-          10개 통화 간 환율을 빠르게 변환하고 수수료 적용 결과를 확인하세요.
+          {getTranslation("exchangeDescription", language)}
         </p>
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr]">
           <div className="space-y-4 rounded-3xl border border-slate-200/80 bg-slate-50/80 p-6 dark:border-slate-800 dark:bg-slate-950/80">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">국가 통화</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{getTranslation("exchangeBaseLabel", language)}</label>
             <select
               value={baseCurrency}
               onChange={(event) => setBaseCurrency(event.target.value)}
@@ -149,7 +185,7 @@ export default function ExchangePage() {
               ))}
             </select>
 
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">변환할 통화</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{getTranslation("exchangeTargetLabel", language)}</label>
             <select
               value={targetCurrency}
               onChange={(event) => setTargetCurrency(event.target.value)}
@@ -162,7 +198,7 @@ export default function ExchangePage() {
               ))}
             </select>
 
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">금액</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{getTranslation("exchangeAmountLabel", language)}</label>
             <input
               type="number"
               value={amount}
@@ -170,7 +206,7 @@ export default function ExchangePage() {
               className="mt-2 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
             />
 
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">수수료 (%)</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">{getTranslation("exchangeFeeLabel", language)}</label>
             <input
               type="range"
               min="0"
@@ -180,33 +216,33 @@ export default function ExchangePage() {
               onChange={(event) => setFeePercent(Number(event.target.value))}
               className="mt-2 w-full"
             />
-            <div className="text-sm text-slate-600 dark:text-slate-400">현재 수수료: {feePercent.toFixed(1)}%</div>
+            <div className="text-sm text-slate-600 dark:text-slate-400">{getTranslation("exchangeFeeValue", language)}: {feePercent.toFixed(1)}%</div>
           </div>
 
           <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/95">
-            <h2 className="text-xl font-semibold text-slate-950 dark:text-white">계산 결과</h2>
+            <h2 className="text-xl font-semibold text-slate-950 dark:text-white">{getTranslation("exchangeResultTitle", language)}</h2>
             {isLoading ? (
-              <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">환율 정보를 불러오는 중입니다...</p>
+              <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">{getTranslation("exchangeLoading", language)}</p>
             ) : (
               <div className="mt-4 space-y-4">
                 {isUsingFallback ? (
                   <p className="text-sm text-amber-600 dark:text-amber-400">
-                    {rateError ?? "예상 환율 (실시간 연결 중)"}
+                    {rateError ?? getTranslation("exchangeLive", language)}
                   </p>
                 ) : (
-                  <p className="text-sm text-emerald-600 dark:text-emerald-400">예상 환율 (실시간 연결 중)</p>
+                  <p className="text-sm text-emerald-600 dark:text-emerald-400">{getTranslation("exchangeLive", language)}</p>
                 )}
                 <div className="rounded-3xl bg-slate-50 p-4 dark:bg-slate-950">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">1 {baseCurrency} = {targetRate.toFixed(4)} {targetCurrency}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{getTranslation("exchangeRateLabel", language).replace("{baseCurrency}", baseCurrency).replace("{targetRate}", targetRate.toFixed(4)).replace("{targetCurrency}", targetCurrency)}</p>
                   <p className="mt-2 text-3xl font-semibold text-slate-950 dark:text-white">{convertedAmount.toLocaleString()} {targetCurrency}</p>
                 </div>
                 <div className="grid gap-3 rounded-3xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
                   <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-                    <span>수수료 금액</span>
+                    <span>{getTranslation("exchangeFeeAmount", language)}</span>
                     <span>{feeAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} {targetCurrency}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-                    <span>수수료 적용 후 금액</span>
+                    <span>{getTranslation("exchangeNetAmount", language)}</span>
                     <span>{totalWithFee.toLocaleString(undefined, { maximumFractionDigits: 2 })} {targetCurrency}</span>
                   </div>
                 </div>
@@ -214,9 +250,9 @@ export default function ExchangePage() {
             )}
 
             <div className="mt-8 rounded-3xl border border-slate-200/80 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">광고 자리 표시자</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">{getTranslation("exchangeAdTitle", language)}</p>
               <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">
-                광고를 게재할 수 있는 공간입니다. 실제 애드센스 코드를 여기로 교체하세요.
+                {getTranslation("exchangeAdBody", language)}
               </p>
             </div>
           </div>
@@ -226,7 +262,7 @@ export default function ExchangePage() {
           <ExchangeHistoryChart
             historyPoints={historyPoints}
             targetCurrency={targetCurrency}
-            emptyMessage={historyError ? "데이터를 불러올 수 없습니다" : undefined}
+            emptyMessage={historyError ? getTranslation("exchangeChartEmpty", language) : undefined}
           />
         </section>
       </section>
