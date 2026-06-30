@@ -31,11 +31,15 @@ const fallbackRates: Record<string, number> = {
   SGD: 1.35,
 };
 
-const fetchRates = async (symbols: string[]) => {
-  const url = new URL("https://api.frankfurter.app/latest");
-  url.searchParams.set("from", "USD");
-  url.searchParams.set("to", symbols.filter((symbol) => symbol !== "USD").join(","));
-  const res = await fetch(url.toString());
+const getFallbackRate = (baseCurrency: string, targetCurrency: string) => {
+  const baseValue = fallbackRates[baseCurrency] ?? 1;
+  const targetValue = fallbackRates[targetCurrency] ?? 1;
+  return baseValue / targetValue;
+};
+
+const fetchRates = async (baseCurrency: string, symbols: string[]) => {
+  const params = new URLSearchParams({ base: baseCurrency, to: symbols.join(",") });
+  const res = await fetch(`/api/exchange?${params.toString()}`);
   if (!res.ok) {
     throw new Error("환율 정보를 불러오는 데 실패했습니다.");
   }
@@ -43,12 +47,8 @@ const fetchRates = async (symbols: string[]) => {
 };
 
 const fetchHistory = async () => {
-  const startDate = "2025-06-01";
-  const endDate = "2026-06-30";
-  const url = new URL(`https://api.frankfurter.app/${startDate}..${endDate}`);
-  url.searchParams.set("from", "USD");
-  url.searchParams.set("to", "KRW");
-  const res = await fetch(url.toString());
+  const params = new URLSearchParams({ base: "USD", to: "KRW", start: "2025-06-01", end: "2026-06-30" });
+  const res = await fetch(`/api/exchange?${params.toString()}`);
   if (!res.ok) {
     throw new Error("환율 차트 데이터를 불러오는 데 실패했습니다.");
   }
@@ -60,34 +60,48 @@ export default function ExchangePage() {
   const [targetCurrency, setTargetCurrency] = useState("USD");
   const [amount, setAmount] = useState(1000);
   const [feePercent, setFeePercent] = useState(0.5);
-  const [rateData, setRateData] = useState<Record<string, number>>({ ...fallbackRates });
+  const [rateData, setRateData] = useState<Record<string, number>>({});
   const [history, setHistory] = useState<Record<string, Record<string, number>>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isUsingFallback, setIsUsingFallback] = useState(false);
   const [historyError, setHistoryError] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       setHistoryError(false);
       setIsUsingFallback(false);
+      setRateError(null);
 
       try {
-        const symbols = currencies.filter((currency) => currency !== "USD");
-        const rates = await fetchRates(symbols);
-        const nextRates: Record<string, number> = { ...fallbackRates };
-        const usdToKrw = fallbackRates.USD;
+        const symbols = currencies.filter((currency) => currency !== baseCurrency);
+        const rates = await fetchRates(baseCurrency, symbols);
+        const nextRates: Record<string, number> = { [baseCurrency]: 1 };
 
         for (const [currency, value] of Object.entries(rates.rates || {})) {
           if (typeof value === "number" && value > 0) {
-            nextRates[currency] = usdToKrw / value;
+            nextRates[currency] = value;
+          }
+        }
+
+        for (const currency of currencies) {
+          if (!(currency in nextRates)) {
+            nextRates[currency] = getFallbackRate(baseCurrency, currency);
           }
         }
 
         setRateData(nextRates);
       } catch {
-        setRateData({ ...fallbackRates });
+        const fallbackRateData: Record<string, number> = { [baseCurrency]: 1 };
+        for (const currency of currencies) {
+          if (currency !== baseCurrency) {
+            fallbackRateData[currency] = getFallbackRate(baseCurrency, currency);
+          }
+        }
+        setRateData(fallbackRateData);
         setIsUsingFallback(true);
+        setRateError("실시간 연결이 불안정해 기본 환율로 계산합니다.");
       }
 
       try {
@@ -104,9 +118,8 @@ export default function ExchangePage() {
     load();
   }, [baseCurrency, targetCurrency]);
 
-  const baseRate = rateData[baseCurrency] ?? fallbackRates[baseCurrency] ?? 1;
-  const targetRate = rateData[targetCurrency] ?? fallbackRates[targetCurrency] ?? 1;
-  const convertedAmount = useMemo(() => (amount * targetRate) / baseRate, [amount, baseRate, targetRate]);
+  const targetRate = rateData[targetCurrency] ?? getFallbackRate(baseCurrency, targetCurrency);
+  const convertedAmount = useMemo(() => amount * targetRate, [amount, targetRate]);
   const feeAmount = useMemo(() => convertedAmount * (feePercent / 100), [convertedAmount, feePercent]);
   const totalWithFee = useMemo(() => convertedAmount - feeAmount, [convertedAmount, feeAmount]);
   const historyPoints = useMemo(
@@ -178,9 +191,11 @@ export default function ExchangePage() {
               <div className="mt-4 space-y-4">
                 {isUsingFallback ? (
                   <p className="text-sm text-amber-600 dark:text-amber-400">
-                    실시간 환율을 불러오지 못해 기본 환율로 계산합니다.
+                    {rateError ?? "예상 환율 (실시간 연결 중)"}
                   </p>
-                ) : null}
+                ) : (
+                  <p className="text-sm text-emerald-600 dark:text-emerald-400">예상 환율 (실시간 연결 중)</p>
+                )}
                 <div className="rounded-3xl bg-slate-50 p-4 dark:bg-slate-950">
                   <p className="text-sm text-slate-500 dark:text-slate-400">1 {baseCurrency} = {targetRate.toFixed(4)} {targetCurrency}</p>
                   <p className="mt-2 text-3xl font-semibold text-slate-950 dark:text-white">{convertedAmount.toLocaleString()} {targetCurrency}</p>

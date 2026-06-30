@@ -1,5 +1,7 @@
 "use client";
 
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+
 type ExchangeHistoryChartProps = {
   historyPoints: Array<[string, Record<string, number>]>,
   targetCurrency: string,
@@ -15,20 +17,13 @@ export default function ExchangeHistoryChart({ historyPoints, targetCurrency, em
     );
   }
 
-  const values = historyPoints.map(([_, entry]) => entry[targetCurrency] ?? 0);
-  const labels = historyPoints.map(([date]) => date.slice(5));
-  const maxValue = Math.max(...values);
-  const minValue = Math.min(...values);
-  const width = 760;
-  const height = 260;
-  const paddingX = 40;
-  const paddingY = 24;
+  const chartData = historyPoints.map(([date, entry]) => ({
+    date: date.slice(5),
+    value: entry[targetCurrency] ?? 0,
+  }));
 
-  const points = values.map((value, index) => {
-    const x = paddingX + (index / Math.max(historyPoints.length - 1, 1)) * (width - paddingX * 2);
-    const y = paddingY + ((maxValue - value) / Math.max(maxValue - minValue, 1)) * (height - paddingY * 2);
-    return `${x},${y}`;
-  });
+  const maxValue = Math.max(...chartData.map((item) => item.value));
+  const minValue = Math.min(...chartData.map((item) => item.value));
 
   return (
     <div className="rounded-3xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/95">
@@ -42,41 +37,16 @@ export default function ExchangeHistoryChart({ historyPoints, targetCurrency, em
           <p>최저 {minValue.toFixed(4)}</p>
         </div>
       </div>
-      <div className="mt-6 overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[24rem]">
-          <defs>
-            <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="rgba(59, 130, 246, 0.35)" />
-              <stop offset="100%" stopColor="rgba(59, 130, 246, 0)" />
-            </linearGradient>
-          </defs>
-          <rect x="0" y="0" width={width} height={height} fill="transparent" />
-          <path
-            d={`M${paddingX},${height - paddingY} L${points.join(" L")} L${width - paddingX},${height - paddingY} Z`}
-            fill="url(#chartGradient)"
-            opacity="0.9"
-          />
-          <polyline
-            fill="none"
-            stroke="#0ea5e9"
-            strokeWidth="3"
-            points={points.join(" ")}
-          />
-          {points.map((point, index) => {
-            const [x, y] = point.split(",").map(Number);
-            return (
-              <circle key={String(index)} cx={x} cy={y} r="3.5" fill="#0ea5e9" stroke="#fff" strokeWidth="1.5" />
-            );
-          })}
-          {labels.map((label, index) => {
-            const x = paddingX + (index / Math.max(labels.length - 1, 1)) * (width - paddingX * 2);
-            return (
-              <text key={label} x={x} y={height - 6} textAnchor="middle" fontSize="10" fill="#64748b">
-                {label}
-              </text>
-            );
-          })}
-        </svg>
+      <div className="mt-6 h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 12 }} minTickGap={20} />
+            <YAxis domain={[minValue * 0.99, maxValue * 1.01]} tick={{ fill: "#64748b", fontSize: 12 }} />
+            <Tooltip />
+            <Line type="monotone" dataKey="value" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
