@@ -8,6 +8,7 @@ import { getTranslation } from "@/lib/translations";
 const navItems = [
   { key: "navHome", href: "/" },
   { key: "navExchange", href: "/exchange" },
+  { key: "navLoan", href: "/loan" },
   { key: "navBmi", href: "/bmi" },
   { key: "navAbout", href: "/about" },
 ];

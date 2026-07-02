@@ -11,6 +11,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: new Date().toISOString(),
     },
     {
+      url: "https://your-calculator-site.vercel.app/loan",
+      lastModified: new Date().toISOString(),
+    },
+    {
       url: "https://your-calculator-site.vercel.app/bmi",
       lastModified: new Date().toISOString(),
     },
